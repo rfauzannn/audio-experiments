@@ -4,24 +4,48 @@ import librosa
 import soundfile as sf
 import numpy as np
 import matplotlib.pyplot as plt
+from pydub.utils import which
 import os
 import uuid
 
-# Folder simpan
+# Pastikan FFmpeg bisa diakses
+AudioSegment.converter = which("ffmpeg")
+
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 def save_audio(uploaded_file):
-    file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}.mp3")
-    with open(file_path, "wb") as f:
+    # Ambil ekstensi asli
+    file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+    
+    if file_ext not in ['.mp3', '.wav']:
+        raise ValueError("Format file tidak didukung. Harap unggah file .mp3 atau .wav")
+
+    # Simpan file mentah dulu
+    raw_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}{file_ext}")
+    with open(raw_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
-    return file_path
+
+    # Uji coba membaca dengan pydub
+    try:
+        audio = AudioSegment.from_file(raw_path)
+    except Exception as e:
+        raise RuntimeError(f"Gagal membaca file audio: {e}")
+
+    # Konversi ke WAV agar aman diproses ke depannya
+    wav_path = raw_path.replace(file_ext, ".wav")
+    audio.export(wav_path, format="wav")
+
+    return wav_path
 
 def apply_fade(audio_path, fade_in_ms=2000, fade_out_ms=2000):
+    if not os.path.exists(audio_path):
+        raise FileNotFoundError(f"File {audio_path} tidak ditemukan")
+
     audio = AudioSegment.from_file(audio_path)
     faded = audio.fade_in(fade_in_ms).fade_out(fade_out_ms)
-    output_path = audio_path.replace(".mp3", "_fade.mp3")
-    faded.export(output_path, format="mp3")
+    output_path = audio_path.replace(".wav", "_fade.wav")
+    faded.export(output_path, format="wav")
     return output_path
 
 def change_tempo(audio_path, rate):
